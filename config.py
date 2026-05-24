@@ -1,3 +1,25 @@
+"""
+=============================================================================
+              A股数据采集系统 - ARM NAS 优化配置
+=============================================================================
+针对 ARM64/aarch64 架构 NAS 优化：
+- 降低并发数减少 CPU 占用
+- 增加请求间隔避免过热
+- 限制内存使用防止内存耗尽
+- 单线程 DuckDB 更稳定
+
+建议硬件配置：
+- CPU: 双核 ARM Cortex-A53/A72 及以上
+- 内存: 4GB 及以上
+- 存储: SSD（推荐）或 HDD（慢速）
+
+部署注意：
+- 使用 venv 隔离环境
+- cron 定时任务建议在 CPU 空闲时段执行
+- 定期清理日志和数据库优化
+=============================================================================
+"""
+
 import os
 from pathlib import Path
 from pydantic import BaseSettings
@@ -14,11 +36,15 @@ class Settings(BaseSettings):
     
     STOCK_LIST: list = []
     UPDATE_ALL_STOCKS: bool = True
-    MAX_CONCURRENT: int = 4
     
-    REQUEST_DELAY_MIN: float = 1.5
-    REQUEST_DELAY_MAX: float = 4.0
+    MAX_CONCURRENT: int = 2
+    REQUEST_DELAY_MIN: float = 2.5
+    REQUEST_DELAY_MAX: float = 6.0
     MAX_RETRIES: int = 5
+    
+    PYTHONARM_MODE: bool = True
+    DUCKDB_THREADS: int = 1
+    DB_MEMORY_LIMIT: str = "2GB"
     
     FINANCIAL_UPDATE_FREQ: Literal["daily", "weekly", "monthly"] = "weekly"
     FINANCIAL_WEEKLY_DAY: int = 5
@@ -37,7 +63,7 @@ class Settings(BaseSettings):
     UPDATE_VALUATION: bool = True
     UPDATE_FINANCIAL: bool = True
     
-    CONNECTION_POOL_SIZE: int = 8
+    CONNECTION_POOL_SIZE: int = 4
     
     class Config:
         env_file = ".env"

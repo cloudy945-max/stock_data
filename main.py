@@ -114,6 +114,11 @@ def show_stats():
         stock_count = len(storage.get_stock_list())
         logger.info(f"  [ACTIVE STOCKS] {stock_count:,} stocks")
         
+        if getattr(settings, 'PYTHONARM_MODE', False):
+            logger.info(f"  [ARM MODE] Enabled - concurrency: {settings.MAX_CONCURRENT}, "
+                       f"DuckDB threads: {settings.DUCKDB_THREADS}, "
+                       f"Memory limit: {settings.DB_MEMORY_LIMIT}")
+        
         logger.info("=" * 60)
     finally:
         if storage:
@@ -122,15 +127,24 @@ def show_stats():
 
 def main():
     parser = argparse.ArgumentParser(
-        description="A股数据采集与存储系统",
+        description="A股数据采集与存储系统 - ARM NAS 优化版",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
+ARM NAS 部署注意事项:
+  - 本系统已针对 ARM64/aarch64 架构优化
+  - 默认并发数: 2 (降低 CPU 占用)
+  - 请求间隔: 2.5-6秒 (避免过热)
+  - DuckDB 内存限制: 2GB (防止内存耗尽)
+
 Examples:
   python main.py --mode init                    # Initialize database
   python main.py --mode update_stock_list       # Update stock list
   python main.py --mode daily                   # Daily update
   python main.py --mode history --start 20200101 --end 20201231
   python main.py --mode stats                   # Show database statistics
+
+Cron 配置 (推荐在 CPU 空闲时段运行):
+  30 18 * * * cd /path/to/stock_data && python main.py --mode daily >> logs/cron.log 2>&1
         """
     )
     parser.add_argument('--mode', type=str, required=True,
@@ -147,9 +161,15 @@ Examples:
     setup_logger()
     
     start_time = datetime.now()
+    
+    arm_mode = getattr(settings, 'PYTHONARM_MODE', False)
+    
     logger.info(f"{'=' * 60}")
     logger.info(f"Stock Data System Started at {start_time.strftime('%Y-%m-%d %H:%M:%S')}")
     logger.info(f"Mode: {args.mode}")
+    if arm_mode:
+        logger.info(f"[ARM MODE] Running on ARM NAS - concurrency limited to {settings.MAX_CONCURRENT}")
+        logger.info(f"[ARM MODE] DuckDB threads: {settings.DUCKDB_THREADS}, Memory limit: {settings.DB_MEMORY_LIMIT}")
     logger.info(f"{'=' * 60}")
     
     try:
@@ -172,6 +192,10 @@ Examples:
         logger.info(f"{'=' * 60}")
         logger.info(f"Completed at {end_time.strftime('%Y-%m-%d %H:%M:%S')}")
         logger.info(f"Duration: {duration:.2f} seconds ({duration/60:.2f} minutes)")
+        
+        if arm_mode:
+            logger.info(f"[ARM MODE] Task completed successfully - system running in low-power mode")
+        
         logger.info(f"{'=' * 60}")
         
     except KeyboardInterrupt:

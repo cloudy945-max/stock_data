@@ -15,6 +15,11 @@ class DailyUpdateTask:
         self.storage = DuckDBStorage()
         self.tushare_fetcher = TushareFetcher()
         self.akshare_fetcher = AKShareFetcher()
+        
+        self._concurrent_workers = settings.MAX_CONCURRENT
+        if getattr(settings, 'PYTHONARM_MODE', False):
+            self._concurrent_workers = min(self._concurrent_workers, 2)
+            logger.info(f"[ARM MODE] Running in ARM NAS mode, concurrency limited to {self._concurrent_workers}")
     
     def _should_update_financial(self) -> bool:
         if settings.FINANCIAL_UPDATE_FREQ == "daily":
@@ -201,6 +206,8 @@ class DailyUpdateTask:
     def run_daily_update(self, stock_list: List[str] = None) -> Dict[str, dict]:
         logger.info("=" * 60)
         logger.info("Starting daily update task")
+        if getattr(settings, 'PYTHONARM_MODE', False):
+            logger.info(f"[ARM MODE] Concurrency limited to {self._concurrent_workers}")
         logger.info(f"Financial update frequency: {settings.FINANCIAL_UPDATE_FREQ}")
         logger.info(f"Should update financial today: {self._should_update_financial()}")
         logger.info("=" * 60)
@@ -223,7 +230,7 @@ class DailyUpdateTask:
         if settings.UPDATE_DAILY:
             logger.info(f"[DAILY] Updating daily data for {len(stock_list)} stocks")
             
-            with ThreadPoolExecutor(max_workers=settings.MAX_CONCURRENT) as executor:
+            with ThreadPoolExecutor(max_workers=self._concurrent_workers) as executor:
                 futures = {executor.submit(self.update_daily_data, ts_code, None, end_date): ts_code for ts_code in stock_list}
                 
                 for future in as_completed(futures):
@@ -245,7 +252,7 @@ class DailyUpdateTask:
         if settings.UPDATE_VALUATION:
             logger.info(f"[VALUATION] Updating valuation data for {len(stock_list)} stocks")
             
-            with ThreadPoolExecutor(max_workers=settings.MAX_CONCURRENT) as executor:
+            with ThreadPoolExecutor(max_workers=self._concurrent_workers) as executor:
                 futures = {executor.submit(self.update_valuation_data, ts_code, None, end_date): ts_code for ts_code in stock_list}
                 
                 for future in as_completed(futures):
@@ -267,7 +274,7 @@ class DailyUpdateTask:
         if settings.UPDATE_FINANCIAL and self._should_update_financial():
             logger.info(f"[FINANCIAL] Updating financial data for {len(stock_list)} stocks")
             
-            with ThreadPoolExecutor(max_workers=settings.MAX_CONCURRENT) as executor:
+            with ThreadPoolExecutor(max_workers=self._concurrent_workers) as executor:
                 futures = {executor.submit(self.update_financial_data, ts_code): ts_code for ts_code in stock_list}
                 
                 for future in as_completed(futures):
@@ -298,6 +305,8 @@ class DailyUpdateTask:
     def run_history_fetch(self, stock_list: List[str] = None, start_date: str = "20000101", end_date: str = None) -> Dict[str, dict]:
         logger.info("=" * 60)
         logger.info(f"Starting history fetch task: {start_date} to {end_date or 'now'}")
+        if getattr(settings, 'PYTHONARM_MODE', False):
+            logger.info(f"[ARM MODE] Concurrency limited to {self._concurrent_workers}")
         logger.info("=" * 60)
         
         if stock_list is None:
@@ -319,7 +328,7 @@ class DailyUpdateTask:
         if settings.UPDATE_DAILY:
             logger.info(f"[DAILY] Fetching historical daily data for {len(stock_list)} stocks")
             
-            with ThreadPoolExecutor(max_workers=settings.MAX_CONCURRENT) as executor:
+            with ThreadPoolExecutor(max_workers=self._concurrent_workers) as executor:
                 futures = {executor.submit(self.update_daily_data, ts_code, start_date, end_date): ts_code for ts_code in stock_list}
                 
                 for future in as_completed(futures):
@@ -339,7 +348,7 @@ class DailyUpdateTask:
         if settings.UPDATE_VALUATION:
             logger.info(f"[VALUATION] Fetching historical valuation data for {len(stock_list)} stocks")
             
-            with ThreadPoolExecutor(max_workers=settings.MAX_CONCURRENT) as executor:
+            with ThreadPoolExecutor(max_workers=self._concurrent_workers) as executor:
                 futures = {executor.submit(self.update_valuation_data, ts_code, start_date, end_date): ts_code for ts_code in stock_list}
                 
                 for future in as_completed(futures):
@@ -359,7 +368,7 @@ class DailyUpdateTask:
         if settings.UPDATE_FINANCIAL:
             logger.info(f"[FINANCIAL] Fetching historical financial data for {len(stock_list)} stocks")
             
-            with ThreadPoolExecutor(max_workers=settings.MAX_CONCURRENT) as executor:
+            with ThreadPoolExecutor(max_workers=self._concurrent_workers) as executor:
                 futures = {executor.submit(self.update_financial_data, ts_code): ts_code for ts_code in stock_list}
                 
                 for future in as_completed(futures):

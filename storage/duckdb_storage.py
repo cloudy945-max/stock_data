@@ -8,7 +8,7 @@ from config import settings, DAILY_TABLE_SCHEMA, VALUATION_TABLE_SCHEMA, FINANCI
 
 
 class ConnectionPool:
-    def __init__(self, db_path: str, pool_size: int = 8):
+    def __init__(self, db_path: str, pool_size: int = 4):
         self.db_path = db_path
         self._pool_size = pool_size
         self._pool: Queue = Queue(maxsize=pool_size)
@@ -16,7 +16,16 @@ class ConnectionPool:
     
     def _create_connection(self):
         conn = duckdb.connect(self.db_path, read_only=False)
-        conn.execute("PRAGMA threads=1")
+        
+        if getattr(settings, 'PYTHONARM_MODE', True):
+            threads = getattr(settings, 'DUCKDB_THREADS', 1)
+            memory_limit = getattr(settings, 'DB_MEMORY_LIMIT', "2GB")
+            conn.execute(f"PRAGMA threads={threads}")
+            conn.execute(f"PRAGMA memory_limit='{memory_limit}'")
+            conn.execute("PRAGMA use_external_storage=true")
+        else:
+            conn.execute("PRAGMA threads=1")
+        
         return conn
     
     def _init_pool(self):
@@ -24,7 +33,7 @@ class ConnectionPool:
             self._pool.put(self._create_connection())
     
     def get_connection(self):
-        return self._pool.get(timeout=30)
+        return self._pool.get(timeout=60)
     
     def return_connection(self, conn):
         self._pool.put(conn)
@@ -51,7 +60,7 @@ class DuckDBStorage:
     def _init_pool(cls):
         with cls._pool_lock:
             if cls._pool is None:
-                pool_size = getattr(settings, 'CONNECTION_POOL_SIZE', 8)
+                pool_size = getattr(settings, 'CONNECTION_POOL_SIZE', 4)
                 cls._pool = ConnectionPool(settings.DB_PATH, pool_size)
     
     def _ensure_dir(self):
