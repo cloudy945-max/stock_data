@@ -10,8 +10,16 @@ logger = get_logger(__name__)
 
 class AKShareFetcher:
     def __init__(self):
-        self._setup_session()
         self._data_source = "AKShare"
+        self._setup_html5lib()
+        self._setup_session()
+    
+    def _setup_html5lib(self):
+        try:
+            ak.set_option('BeautifulSoup', {'features': 'html5lib'})
+            logger.info("[AKShare] Using html5lib parser for BeautifulSoup")
+        except Exception as e:
+            logger.warning(f"[AKShare] Failed to set html5lib parser: {e}, will use default parser")
     
     def _setup_session(self):
         if settings.PROXY_ENABLED and settings.PROXY_URL:
@@ -20,10 +28,17 @@ class AKShareFetcher:
     def _set_random_user_agent(self):
         ak.headers = {"User-Agent": random.choice(USER_AGENT_POOL)}
     
+    def _ensure_html5lib(self):
+        try:
+            ak.set_option('BeautifulSoup', {'features': 'html5lib'})
+        except Exception:
+            pass
+    
     @retry_with_backoff()
     def fetch_stock_basic(self) -> pd.DataFrame:
         random_delay()
         self._set_random_user_agent()
+        self._ensure_html5lib()
         
         try:
             df = ak.stock_zh_a_spot()
@@ -46,10 +61,10 @@ class AKShareFetcher:
             df['industry'] = ''
             df['list_date'] = ''
             
-            logger.info(f"[AKShare] Fetched {len(df)} stocks from stock_zh_a_spot")
+            logger.info(f"[AKShare] Fetched {len(df)} stocks from stock_zh_a_spot (using html5lib parser)")
             return df[['ts_code', 'symbol', 'name', 'area', 'industry', 'list_date', 'status']]
         except Exception as e:
-            logger.error(f"[AKShare] Failed to fetch stock_basic: {e}")
+            logger.error(f"[AKShare] Failed to fetch stock_basic (using html5lib parser): {e}")
             return pd.DataFrame()
     
     @retry_with_backoff()
@@ -62,6 +77,7 @@ class AKShareFetcher:
         symbol = ts_code.split('.')[0]
         random_delay()
         self._set_random_user_agent()
+        self._ensure_html5lib()
         
         try:
             df = ak.stock_zh_a_hist(symbol=symbol, period="daily", start_date=start_date, end_date=end_date, adjust="qfq")
@@ -89,10 +105,10 @@ class AKShareFetcher:
             df = df[['ts_code', 'trade_date', 'open', 'high', 'low', 'close', 
                      'pre_close', 'change', 'pct_chg', 'volume', 'amount', 'adj_factor']]
             
-            logger.debug(f"[AKShare] Got {len(df)} daily records for {ts_code}")
+            logger.debug(f"[AKShare] Got {len(df)} daily records for {ts_code} (using html5lib parser)")
             return df
         except Exception as e:
-            logger.error(f"[AKShare] Failed to fetch daily data for {ts_code}: {e}")
+            logger.error(f"[AKShare] Failed to fetch daily data for {ts_code} (using html5lib parser): {e}")
             return pd.DataFrame()
     
     @retry_with_backoff()
@@ -105,6 +121,7 @@ class AKShareFetcher:
         symbol = ts_code.split('.')[0]
         random_delay()
         self._set_random_user_agent()
+        self._ensure_html5lib()
         
         try:
             df = ak.stock_a_indicator_lg(symbol=symbol)
@@ -147,10 +164,10 @@ class AKShareFetcher:
             df = df[['ts_code', 'trade_date', 'pe', 'pe_ttm', 'pb', 'ps', 
                      'ps_ttm', 'dv_ratio', 'dv_ttm', 'total_mv', 'circ_mv']]
             
-            logger.debug(f"[AKShare] Got {len(df)} valuation records for {ts_code}")
+            logger.debug(f"[AKShare] Got {len(df)} valuation records for {ts_code} (using html5lib parser)")
             return df
         except Exception as e:
-            logger.error(f"[AKShare] Failed to fetch valuation for {ts_code}: {e}")
+            logger.error(f"[AKShare] Failed to fetch valuation for {ts_code} (using html5lib parser): {e}")
             return pd.DataFrame()
     
     @retry_with_backoff()
@@ -163,6 +180,7 @@ class AKShareFetcher:
         symbol = ts_code.split('.')[0]
         random_delay()
         self._set_random_user_agent()
+        self._ensure_html5lib()
         
         try:
             if report_type == "yearly":
@@ -198,16 +216,17 @@ class AKShareFetcher:
                      'basic_eps', 'diluted_eps', 'total_revenue', 'operating_revenue',
                      'profit_total', 'net_profit', 'total_assets', 'total_liability', 'owner_eq']]
             
-            logger.debug(f"[AKShare] Got {len(df)} {report_type} financial records for {ts_code}")
+            logger.debug(f"[AKShare] Got {len(df)} {report_type} financial records for {ts_code} (using html5lib parser)")
             return df
         except Exception as e:
-            logger.error(f"[AKShare] Failed to fetch financial report for {ts_code}: {e}")
+            logger.error(f"[AKShare] Failed to fetch financial report for {ts_code} (using html5lib parser): {e}")
             return pd.DataFrame()
     
     @retry_with_backoff()
     def fetch_index_daily(self, index_code: str, start_date: Optional[str] = None, end_date: Optional[str] = None) -> pd.DataFrame:
         random_delay()
         self._set_random_user_agent()
+        self._ensure_html5lib()
         
         try:
             df = ak.stock_zh_index_daily(symbol=index_code)
@@ -231,8 +250,8 @@ class AKShareFetcher:
             df['pct_chg'] = (df['change'] / df['pre_close']) * 100
             df['adj_factor'] = 1.0
             
-            logger.debug(f"[AKShare] Got {len(df)} index records for {index_code}")
+            logger.debug(f"[AKShare] Got {len(df)} index records for {index_code} (using html5lib parser)")
             return df
         except Exception as e:
-            logger.error(f"[AKShare] Failed to fetch index daily for {index_code}: {e}")
+            logger.error(f"[AKShare] Failed to fetch index daily for {index_code} (using html5lib parser): {e}")
             return pd.DataFrame()
