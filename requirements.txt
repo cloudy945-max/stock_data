@@ -1,0 +1,11 @@
+python==3.11.5
+duckdb==1.0.0
+pandas==2.1.4
+tushare==1.2.89
+akshare==1.11.86
+requests==2.31.0
+schedule==1.2.0
+python-dotenv==1.0.0
+loguru==0.7.2
+tenacity==8.2.3
+pydantic==2.5.2
