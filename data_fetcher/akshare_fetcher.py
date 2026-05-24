@@ -11,6 +11,7 @@ logger = get_logger(__name__)
 class AKShareFetcher:
     def __init__(self):
         self._setup_session()
+        self._data_source = "AKShare"
     
     def _setup_session(self):
         if settings.PROXY_ENABLED and settings.PROXY_URL:
@@ -27,7 +28,7 @@ class AKShareFetcher:
         try:
             df = ak.stock_zh_a_spot()
             if df.empty:
-                logger.warning("AKShare stock_zh_a_spot returned empty")
+                logger.warning("[AKShare] stock_zh_a_spot returned empty")
                 return pd.DataFrame()
             
             df = df.rename(columns={
@@ -45,22 +46,27 @@ class AKShareFetcher:
             df['industry'] = ''
             df['list_date'] = ''
             
+            logger.info(f"[AKShare] Fetched {len(df)} stocks from stock_zh_a_spot")
             return df[['ts_code', 'symbol', 'name', 'area', 'industry', 'list_date', 'status']]
         except Exception as e:
-            logger.error(f"Failed to fetch stock_basic from AKShare: {e}")
+            logger.error(f"[AKShare] Failed to fetch stock_basic: {e}")
             return pd.DataFrame()
     
     @retry_with_backoff()
     def fetch_daily(self, ts_code: str, start_date: Optional[str] = None, end_date: Optional[str] = None) -> pd.DataFrame:
         ts_code = normalize_ts_code(ts_code)
-        symbol = ts_code.split('.')[0]
+        if not ts_code:
+            logger.warning(f"[AKShare] Invalid ts_code: {ts_code}")
+            return pd.DataFrame()
         
+        symbol = ts_code.split('.')[0]
         random_delay()
         self._set_random_user_agent()
         
         try:
             df = ak.stock_zh_a_hist(symbol=symbol, period="daily", start_date=start_date, end_date=end_date, adjust="qfq")
             if df.empty:
+                logger.debug(f"[AKShare] No daily data for {ts_code}")
                 return pd.DataFrame()
             
             df = df.rename(columns={
@@ -82,22 +88,28 @@ class AKShareFetcher:
             
             df = df[['ts_code', 'trade_date', 'open', 'high', 'low', 'close', 
                      'pre_close', 'change', 'pct_chg', 'volume', 'amount', 'adj_factor']]
+            
+            logger.debug(f"[AKShare] Got {len(df)} daily records for {ts_code}")
             return df
         except Exception as e:
-            logger.error(f"Failed to fetch daily data for {ts_code}: {e}")
+            logger.error(f"[AKShare] Failed to fetch daily data for {ts_code}: {e}")
             return pd.DataFrame()
     
     @retry_with_backoff()
     def fetch_valuation(self, ts_code: str, start_date: Optional[str] = None, end_date: Optional[str] = None) -> pd.DataFrame:
         ts_code = normalize_ts_code(ts_code)
-        symbol = ts_code.split('.')[0]
+        if not ts_code:
+            logger.warning(f"[AKShare] Invalid ts_code for valuation: {ts_code}")
+            return pd.DataFrame()
         
+        symbol = ts_code.split('.')[0]
         random_delay()
         self._set_random_user_agent()
         
         try:
             df = ak.stock_a_indicator_lg(symbol=symbol)
             if df.empty:
+                logger.warning(f"[AKShare] No valuation data for {ts_code}")
                 return pd.DataFrame()
             
             df = df.rename(columns={
@@ -115,18 +127,40 @@ class AKShareFetcher:
             
             df['ts_code'] = ts_code
             
+            date_range_years = 0
+            if start_date and end_date:
+                from datetime import datetime
+                try:
+                    start = datetime.strptime(start_date, "%Y-%m-%d")
+                    end = datetime.strptime(end_date, "%Y-%m-%d")
+                    date_range_years = (end - start).days / 365.25
+                except:
+                    pass
+            
+            if date_range_years > 1 and len(df) < 100:
+                logger.warning(
+                    f"[AKShare] Valuation data for {ts_code} may be incomplete. "
+                    f"Expected ~{int(date_range_years * 250)} records for {date_range_years:.1f} years, got {len(df)}. "
+                    f"Consider using alternative sources for historical valuation data."
+                )
+            
             df = df[['ts_code', 'trade_date', 'pe', 'pe_ttm', 'pb', 'ps', 
                      'ps_ttm', 'dv_ratio', 'dv_ttm', 'total_mv', 'circ_mv']]
+            
+            logger.debug(f"[AKShare] Got {len(df)} valuation records for {ts_code}")
             return df
         except Exception as e:
-            logger.error(f"Failed to fetch valuation for {ts_code}: {e}")
+            logger.error(f"[AKShare] Failed to fetch valuation for {ts_code}: {e}")
             return pd.DataFrame()
     
     @retry_with_backoff()
     def fetch_financial_report(self, ts_code: str, report_type: str = "yearly") -> pd.DataFrame:
         ts_code = normalize_ts_code(ts_code)
-        symbol = ts_code.split('.')[0]
+        if not ts_code:
+            logger.warning(f"[AKShare] Invalid ts_code for financial: {ts_code}")
+            return pd.DataFrame()
         
+        symbol = ts_code.split('.')[0]
         random_delay()
         self._set_random_user_agent()
         
@@ -139,6 +173,7 @@ class AKShareFetcher:
                 df = ak.stock_financial_report_sina(symbol=symbol, symbol_type="yearly")
             
             if df.empty:
+                logger.warning(f"[AKShare] No {report_type} financial data for {ts_code}")
                 return pd.DataFrame()
             
             df = df.rename(columns={
@@ -162,9 +197,11 @@ class AKShareFetcher:
             df = df[['ts_code', 'ann_date', 'f_ann_date', 'end_date', 'report_type',
                      'basic_eps', 'diluted_eps', 'total_revenue', 'operating_revenue',
                      'profit_total', 'net_profit', 'total_assets', 'total_liability', 'owner_eq']]
+            
+            logger.debug(f"[AKShare] Got {len(df)} {report_type} financial records for {ts_code}")
             return df
         except Exception as e:
-            logger.error(f"Failed to fetch financial report for {ts_code}: {e}")
+            logger.error(f"[AKShare] Failed to fetch financial report for {ts_code}: {e}")
             return pd.DataFrame()
     
     @retry_with_backoff()
@@ -175,6 +212,7 @@ class AKShareFetcher:
         try:
             df = ak.stock_zh_index_daily(symbol=index_code)
             if df.empty:
+                logger.warning(f"[AKShare] No index data for {index_code}")
                 return pd.DataFrame()
             
             df = df.rename(columns={
@@ -193,7 +231,8 @@ class AKShareFetcher:
             df['pct_chg'] = (df['change'] / df['pre_close']) * 100
             df['adj_factor'] = 1.0
             
+            logger.debug(f"[AKShare] Got {len(df)} index records for {index_code}")
             return df
         except Exception as e:
-            logger.error(f"Failed to fetch index daily for {index_code}: {e}")
+            logger.error(f"[AKShare] Failed to fetch index daily for {index_code}: {e}")
             return pd.DataFrame()

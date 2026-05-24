@@ -1,11 +1,9 @@
-import os
 import duckdb
 import pandas as pd
 from pathlib import Path
-from typing import Optional, List, Dict, Any
+from typing import Optional, List, Dict
 from queue import Queue, Empty
 from threading import Lock
-from contextlib import contextmanager
 from config import settings, DAILY_TABLE_SCHEMA, VALUATION_TABLE_SCHEMA, FINANCIAL_TABLE_SCHEMA, STOCK_BASIC_TABLE_SCHEMA
 
 
@@ -14,7 +12,6 @@ class ConnectionPool:
         self.db_path = db_path
         self._pool_size = pool_size
         self._pool: Queue = Queue(maxsize=pool_size)
-        self._lock = Lock()
         self._init_pool()
     
     def _create_connection(self):
@@ -26,15 +23,11 @@ class ConnectionPool:
         for _ in range(self._pool_size):
             self._pool.put(self._create_connection())
     
-    @contextmanager
     def get_connection(self):
-        conn = None
-        try:
-            conn = self._pool.get(timeout=30)
-            yield conn
-        finally:
-            if conn is not None:
-                self._pool.put(conn)
+        return self._pool.get(timeout=30)
+    
+    def return_connection(self, conn):
+        self._pool.put(conn)
     
     def close_all(self):
         while not self._pool.empty():
@@ -53,7 +46,6 @@ class DuckDBStorage:
         self.db_path = db_path or settings.DB_PATH
         self._ensure_dir()
         self._init_pool()
-        self._local_conn = self._get_connection()
     
     @classmethod
     def _init_pool(cls):
@@ -62,82 +54,69 @@ class DuckDBStorage:
                 pool_size = getattr(settings, 'CONNECTION_POOL_SIZE', 8)
                 cls._pool = ConnectionPool(settings.DB_PATH, pool_size)
     
-    def _get_connection(self):
-        return self._pool.get_connection()
-    
     def _ensure_dir(self):
         db_dir = Path(self.db_path).parent
         db_dir.mkdir(parents=True, exist_ok=True)
     
-    def _create_table_if_not_exists(self, table_name: str, schema: Dict[str, str], conn=None):
-        columns = ", ".join([f"{col} {dtype}" for col, dtype in schema.items()])
-        create_sql = f"""
-            CREATE TABLE IF NOT EXISTS {table_name} (
-                {columns}
-            )
-        """
-        target_conn = conn or self._local_conn
-        target_conn.execute(create_sql)
-        target_conn.commit()
+    def _execute_with_connection(self, func, *args, **kwargs):
+        conn = self._pool.get_connection()
+        try:
+            result = func(conn, *args, **kwargs)
+            return result
+        finally:
+            self._pool.return_connection(conn)
     
-    def _create_unique_index(self, table_name: str, columns: List[str], conn=None):
-        index_name = f"idx_{table_name}_{'_'.join(columns)}"
-        columns_str = ", ".join(columns)
-        create_index_sql = f"""
-            CREATE UNIQUE INDEX IF NOT EXISTS {index_name} 
-            ON {table_name} ({columns_str})
-        """
-        target_conn = conn or self._local_conn
-        target_conn.execute(create_index_sql)
-        target_conn.commit()
+    def _execute_void(self, conn, sql, params=None):
+        if params:
+            conn.execute(sql, params)
+        else:
+            conn.execute(sql)
+        conn.commit()
     
     def init_tables(self):
-        self._create_table_if_not_exists("daily", DAILY_TABLE_SCHEMA)
-        self._create_unique_index("daily", ["ts_code", "trade_date"])
+        def _init(conn):
+            for table_name, schema in [
+                ("daily", DAILY_TABLE_SCHEMA),
+                ("valuation", VALUATION_TABLE_SCHEMA),
+                ("financial", FINANCIAL_TABLE_SCHEMA),
+                ("stock_basic", STOCK_BASIC_TABLE_SCHEMA)
+            ]:
+                columns = ", ".join([f"{col} {dtype}" for col, dtype in schema.items()])
+                create_sql = f"CREATE TABLE IF NOT EXISTS {table_name} ({columns})"
+                conn.execute(create_sql)
+            
+            conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_daily_ts_trade ON daily (ts_code, trade_date)")
+            conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_valuation_ts_trade ON valuation (ts_code, trade_date)")
+            conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_financial_ts_end_report ON financial (ts_code, end_date, report_type)")
+            conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_stock_basic_ts ON stock_basic (ts_code)")
+            
+            conn.commit()
         
-        self._create_table_if_not_exists("valuation", VALUATION_TABLE_SCHEMA)
-        self._create_unique_index("valuation", ["ts_code", "trade_date"])
-        
-        self._create_table_if_not_exists("financial", FINANCIAL_TABLE_SCHEMA)
-        self._create_unique_index("financial", ["ts_code", "end_date", "report_type"])
-        
-        self._create_table_if_not_exists("stock_basic", STOCK_BASIC_TABLE_SCHEMA)
-        self._create_unique_index("stock_basic", ["ts_code"])
-        
-        self._local_conn.commit()
+        self._execute_with_connection(_init)
     
     def get_latest_date(self, table_name: str, ts_code: str) -> Optional[str]:
-        with self._pool.get_connection() as conn:
-            query = f"""
-                SELECT MAX(trade_date) as latest_date 
-                FROM {table_name} 
-                WHERE ts_code = ?
-            """
+        def _query(conn):
+            query = f"SELECT MAX(trade_date) FROM {table_name} WHERE ts_code = ?"
             result = conn.execute(query, [ts_code]).fetchone()
-            if result and result[0]:
-                return str(result[0])
-            return None
+            return str(result[0]) if result and result[0] else None
+        
+        return self._execute_with_connection(_query)
     
     def get_latest_financial_date(self, ts_code: str) -> Optional[str]:
-        with self._pool.get_connection() as conn:
-            query = """
-                SELECT MAX(end_date) as latest_date 
-                FROM financial 
-                WHERE ts_code = ?
-            """
+        def _query(conn):
+            query = "SELECT MAX(end_date) FROM financial WHERE ts_code = ?"
             result = conn.execute(query, [ts_code]).fetchone()
-            if result and result[0]:
-                return str(result[0])
-            return None
+            return str(result[0]) if result and result[0] else None
+        
+        return self._execute_with_connection(_query)
     
     def insert_or_update(self, table_name: str, df: pd.DataFrame):
         if df.empty:
             return 0
         
-        df = df.copy()
-        df = df.where(pd.notnull(df), None)
+        df = df.copy().where(pd.notnull(df), None)
         
-        with self._pool.get_connection() as conn:
+        def _insert(conn):
             temp_table = f"temp_{table_name}_{pd.Timestamp.now().strftime('%H%M%S%f')}"
             conn.register(temp_table, df)
             
@@ -146,9 +125,7 @@ class DuckDBStorage:
             
             delete_sql = f"""
                 DELETE FROM {table_name} 
-                WHERE (ts_code, trade_date) IN (
-                    SELECT ts_code, trade_date FROM {temp_table}
-                )
+                WHERE (ts_code, trade_date) IN (SELECT ts_code, trade_date FROM {temp_table})
             """
             
             insert_sql = f"""
@@ -156,76 +133,58 @@ class DuckDBStorage:
                 SELECT {columns} FROM {temp_table}
             """
             
-            try:
-                conn.execute(delete_sql)
-                conn.execute(insert_sql)
-                conn.commit()
-                return len(df)
-            except Exception as e:
-                conn.rollback()
-                raise e
+            conn.execute(delete_sql)
+            conn.execute(insert_sql)
+            conn.commit()
+            
+            return len(df)
+        return self._execute_with_connection(_insert)
     
     def insert_or_update_financial(self, df: pd.DataFrame):
         if df.empty:
             return 0
         
-        df = df.copy()
-        df = df.where(pd.notnull(df), None)
+        df = df.copy().where(pd.notnull(df), None)
         
-        with self._pool.get_connection() as conn:
-            temp_table = f"temp_financial_{pd.Timestamp.now().strftime('%H%M%S%f')}"
+        def _insert(conn):
+            temp_table = f"temp_fin_{pd.Timestamp.now().strftime('%H%M%S%f')}"
             conn.register(temp_table, df)
             
-            delete_sql = """
+            delete_sql = f"""
                 DELETE FROM financial 
-                WHERE (ts_code, end_date, report_type) IN (
-                    SELECT ts_code, end_date, report_type FROM temp_financial
-                )
-            """.replace("temp_financial", temp_table)
-            
-            insert_sql = f"""
-                INSERT INTO financial 
-                SELECT * FROM {temp_table}
+                WHERE (ts_code, end_date, report_type) IN (SELECT ts_code, end_date, report_type FROM {temp_table})
             """
             
-            try:
-                conn.execute(delete_sql)
-                conn.execute(insert_sql)
-                conn.commit()
-                return len(df)
-            except Exception as e:
-                conn.rollback()
-                raise e
+            insert_sql = f"INSERT INTO financial SELECT * FROM {temp_table}"
+            
+            conn.execute(delete_sql)
+            conn.execute(insert_sql)
+            conn.commit()
+            
+            return len(df)
+        
+        return self._execute_with_connection(_insert)
     
     def insert_stock_basic(self, df: pd.DataFrame):
         if df.empty:
             return 0
         
-        df = df.copy()
-        df = df.where(pd.notnull(df), None)
+        df = df.copy().where(pd.notnull(df), None)
         
-        with self._pool.get_connection() as conn:
-            temp_table = f"temp_stock_basic_{pd.Timestamp.now().strftime('%H%M%S%f')}"
+        def _insert(conn):
+            temp_table = f"temp_basic_{pd.Timestamp.now().strftime('%H%M%S%f')}"
             conn.register(temp_table, df)
             
-            delete_sql = f"""
-                DELETE FROM stock_basic 
-                WHERE ts_code IN (SELECT ts_code FROM {temp_table})
-            """
+            delete_sql = f"DELETE FROM stock_basic WHERE ts_code IN (SELECT ts_code FROM {temp_table})"
+            insert_sql = f"INSERT INTO stock_basic SELECT * FROM {temp_table}"
             
-            insert_sql = f"""
-                INSERT INTO stock_basic 
-                SELECT * FROM {temp_table}
-            """
+            conn.execute(delete_sql)
+            conn.execute(insert_sql)
+            conn.commit()
             
-            try:
-                conn.execute(delete_sql)
-                conn.execute(insert_sql)
-                conn.commit()
-                return len(df)
-            except Exception as e:
-                conn.rollback()
-                raise e
+            return len(df)
+        
+        return self._execute_with_connection(_insert)
     
     def _get_schema(self, table_name: str) -> Dict[str, str]:
         schemas = {
@@ -237,37 +196,51 @@ class DuckDBStorage:
         return schemas.get(table_name, {})
     
     def get_stock_list(self) -> List[str]:
-        with self._pool.get_connection() as conn:
+        def _query(conn):
             query = "SELECT ts_code FROM stock_basic WHERE status = 'L'"
             result = conn.execute(query).fetchall()
             return [row[0] for row in result]
+        
+        return self._execute_with_connection(_query)
     
     def get_table_row_count(self, table_name: str) -> int:
-        with self._pool.get_connection() as conn:
+        def _query(conn):
             query = f"SELECT COUNT(*) FROM {table_name}"
             result = conn.execute(query).fetchone()
             return result[0] if result else 0
+        
+        return self._execute_with_connection(_query)
     
     def get_distinct_dates(self, table_name: str) -> List[str]:
-        with self._pool.get_connection() as conn:
+        def _query(conn):
             query = f"SELECT DISTINCT trade_date FROM {table_name} ORDER BY trade_date"
             result = conn.execute(query).fetchall()
             return [str(row[0]) for row in result]
+        
+        return self._execute_with_connection(_query)
     
     def query(self, sql: str, params: Optional[List] = None) -> pd.DataFrame:
-        params = params or []
-        with self._pool.get_connection() as conn:
+        def _query(conn):
+            params = params or []
             return conn.execute(sql, params).fetchdf()
-    
-    def close(self):
-        self._local_conn.close()
+        
+        return self._execute_with_connection(_query)
     
     def vacuum(self):
-        with self._pool.get_connection() as conn:
+        def _vacuum(conn):
             conn.execute("VACUUM")
             conn.commit()
+        
+        self._execute_with_connection(_vacuum)
     
     def analyze(self):
-        with self._pool.get_connection() as conn:
+        def _analyze(conn):
             conn.execute("ANALYZE")
             conn.commit()
+        
+        self._execute_with_connection(_analyze)
+    
+    def close(self):
+        if self._pool:
+            self._pool.close_all()
+            DuckDBStorage._pool = None
