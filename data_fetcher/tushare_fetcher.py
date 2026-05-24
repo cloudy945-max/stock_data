@@ -28,7 +28,12 @@ class TushareFetcher:
         
         random_delay()
         try:
-            df = self.pro_api.stock_basic(exchange='', list_status='L', fields='ts_code,symbol,name,area,industry,list_date')
+            df = self.pro_api.stock_basic(exchange='', list_status='L', 
+                                          fields='ts_code,symbol,name,area,industry,list_date')
+            if df.empty:
+                logger.warning("Tushare stock_basic returned empty")
+                return pd.DataFrame()
+            
             df = df.rename(columns={
                 'ts_code': 'ts_code',
                 'symbol': 'symbol',
@@ -44,12 +49,16 @@ class TushareFetcher:
             return pd.DataFrame()
     
     @retry_with_backoff()
-    def fetch_daily(self, ts_code: str, start_date: Optional[str] = None, end_date: Optional[str] = None) -> pd.DataFrame:
+    def fetch_daily(self, ts_code: str, start_date: Optional[str] = None, 
+                    end_date: Optional[str] = None) -> pd.DataFrame:
         if not self.pro_api:
             logger.error("Tushare API not initialized")
             return pd.DataFrame()
         
         ts_code = normalize_ts_code(ts_code)
+        if not ts_code:
+            return pd.DataFrame()
+        
         random_delay()
         
         try:
@@ -67,7 +76,7 @@ class TushareFetcher:
                 'pre_close': 'pre_close',
                 'change': 'change',
                 'pct_chg': 'pct_chg',
-                'volume': 'volume',
+                'vol': 'volume',
                 'amount': 'amount'
             })
             df['adj_factor'] = 1.0
@@ -77,12 +86,16 @@ class TushareFetcher:
             return pd.DataFrame()
     
     @retry_with_backoff()
-    def fetch_adj_factor(self, ts_code: str, start_date: Optional[str] = None, end_date: Optional[str] = None) -> pd.DataFrame:
+    def fetch_adj_factor(self, ts_code: str, start_date: Optional[str] = None, 
+                        end_date: Optional[str] = None) -> pd.DataFrame:
         if not self.pro_api:
             logger.error("Tushare API not initialized")
             return pd.DataFrame()
         
         ts_code = normalize_ts_code(ts_code)
+        if not ts_code:
+            return pd.DataFrame()
+        
         random_delay()
         
         try:
@@ -98,97 +111,4 @@ class TushareFetcher:
             return df
         except Exception as e:
             logger.error(f"Failed to fetch adj_factor for {ts_code}: {e}")
-            return pd.DataFrame()
-    
-    @retry_with_backoff()
-    def fetch_daily_basic(self, ts_code: str, start_date: Optional[str] = None, end_date: Optional[str] = None) -> pd.DataFrame:
-        if not self.pro_api:
-            logger.error("Tushare API not initialized")
-            return pd.DataFrame()
-        
-        ts_code = normalize_ts_code(ts_code)
-        random_delay()
-        
-        try:
-            df = self.pro_api.daily_basic(ts_code=ts_code, start_date=start_date, end_date=end_date)
-            if df.empty:
-                return pd.DataFrame()
-            
-            df = df.rename(columns={
-                'ts_code': 'ts_code',
-                'trade_date': 'trade_date',
-                'pe': 'pe',
-                'pe_ttm': 'pe_ttm',
-                'pb': 'pb',
-                'ps': 'ps',
-                'ps_ttm': 'ps_ttm',
-                'dv_ratio': 'dv_ratio',
-                'dv_ttm': 'dv_ttm',
-                'total_mv': 'total_mv',
-                'circ_mv': 'circ_mv'
-            })
-            return df
-        except Exception as e:
-            logger.error(f"Failed to fetch daily_basic for {ts_code}: {e}")
-            return pd.DataFrame()
-    
-    @retry_with_backoff()
-    def fetch_income(self, ts_code: str, start_date: Optional[str] = None, end_date: Optional[str] = None) -> pd.DataFrame:
-        if not self.pro_api:
-            logger.error("Tushare API not initialized")
-            return pd.DataFrame()
-        
-        ts_code = normalize_ts_code(ts_code)
-        random_delay()
-        
-        try:
-            df = self.pro_api.income(ts_code=ts_code, start_date=start_date, end_date=end_date)
-            if df.empty:
-                return pd.DataFrame()
-            
-            df = df.rename(columns={
-                'ts_code': 'ts_code',
-                'ann_date': 'ann_date',
-                'f_ann_date': 'f_ann_date',
-                'end_date': 'end_date',
-                'report_type': 'report_type',
-                'basic_eps': 'basic_eps',
-                'diluted_eps': 'diluted_eps',
-                'total_revenue': 'total_revenue',
-                'operating_revenue': 'operating_revenue',
-                'profit_total': 'profit_total',
-                'net_profit': 'net_profit'
-            })
-            return df
-        except Exception as e:
-            logger.error(f"Failed to fetch income for {ts_code}: {e}")
-            return pd.DataFrame()
-    
-    @retry_with_backoff()
-    def fetch_balancesheet(self, ts_code: str, start_date: Optional[str] = None, end_date: Optional[str] = None) -> pd.DataFrame:
-        if not self.pro_api:
-            logger.error("Tushare API not initialized")
-            return pd.DataFrame()
-        
-        ts_code = normalize_ts_code(ts_code)
-        random_delay()
-        
-        try:
-            df = self.pro_api.balancesheet(ts_code=ts_code, start_date=start_date, end_date=end_date)
-            if df.empty:
-                return pd.DataFrame()
-            
-            df = df.rename(columns={
-                'ts_code': 'ts_code',
-                'ann_date': 'ann_date',
-                'f_ann_date': 'f_ann_date',
-                'end_date': 'end_date',
-                'report_type': 'report_type',
-                'total_assets': 'total_assets',
-                'total_liability': 'total_liability',
-                'owner_eq': 'owner_eq'
-            })
-            return df
-        except Exception as e:
-            logger.error(f"Failed to fetch balancesheet for {ts_code}: {e}")
             return pd.DataFrame()

@@ -1,6 +1,7 @@
 import os
 from pathlib import Path
 from pydantic import BaseSettings
+from typing import Literal
 
 
 class Settings(BaseSettings):
@@ -19,6 +20,9 @@ class Settings(BaseSettings):
     REQUEST_DELAY_MAX: float = 4.0
     MAX_RETRIES: int = 5
     
+    FINANCIAL_UPDATE_FREQ: Literal["daily", "weekly", "monthly"] = "weekly"
+    FINANCIAL_WEEKLY_DAY: int = 5
+    
     MAIL_ENABLED: bool = False
     MAIL_SMTP_SERVER: str = "smtp.qq.com"
     MAIL_SMTP_PORT: int = 465
@@ -32,6 +36,8 @@ class Settings(BaseSettings):
     UPDATE_DAILY: bool = True
     UPDATE_VALUATION: bool = True
     UPDATE_FINANCIAL: bool = True
+    
+    CONNECTION_POOL_SIZE: int = 8
     
     class Config:
         env_file = ".env"
@@ -110,4 +116,15 @@ STOCK_BASIC_TABLE_SCHEMA = {
     "industry": "VARCHAR",
     "list_date": "DATE",
     "status": "VARCHAR",
+}
+
+
+VALUATION_VALIDATION_RULES = {
+    "pe": {"min": -100, "max": 1000, "allow_null": True},
+    "pe_ttm": {"min": -100, "max": 1000, "allow_null": True},
+    "pb": {"min": -10, "max": 100, "allow_null": True},
+    "ps": {"min": -50, "max": 500, "allow_null": True},
+    "ps_ttm": {"min": -50, "max": 500, "allow_null": True},
+    "dv_ratio": {"min": 0, "max": 20, "allow_null": True},
+    "dv_ttm": {"min": 0, "max": 20, "allow_null": True},
 }
