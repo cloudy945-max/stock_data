@@ -22,8 +22,7 @@
 
 import os
 from pathlib import Path
-from pydantic import BaseSettings
-from typing import Literal
+from pydantic_settings import BaseSettings
 
 
 class Settings(BaseSettings):
@@ -37,6 +36,7 @@ class Settings(BaseSettings):
     
     STOCK_LIST: list = []
     UPDATE_ALL_STOCKS: bool = True
+<<<<<<< HEAD
     
     MAX_CONCURRENT: int = 2
     REQUEST_DELAY_MIN: float = 2.5
@@ -49,27 +49,35 @@ class Settings(BaseSettings):
     FINANCIAL_UPDATE_FREQ: Literal["daily", "weekly", "monthly"] = "weekly"
     FINANCIAL_WEEKLY_DAY: int = 5
     
-    MAIL_ENABLED: bool = False
-    MAIL_SMTP_SERVER: str = "smtp.qq.com"
-    MAIL_SMTP_PORT: int = 465
-    MAIL_USERNAME: str = ""
-    MAIL_PASSWORD: str = ""
-    MAIL_RECEIVERS: list = []
+=======
+    MAX_CONCURRENT: int = 8
     
+    REQUEST_DELAY_MIN: float = 1.0
+    REQUEST_DELAY_MAX: float = 3.0
+    MAX_RETRIES: int = 5
+    
+>>>>>>> fd87bc8 (修复项目bug：数据库连接、定时任务、配置、日志)
+    MAIL_ENABLED: bool = False
     PROXY_ENABLED: bool = False
-    PROXY_URL: str = ""
     
     UPDATE_DAILY: bool = True
     UPDATE_VALUATION: bool = True
     UPDATE_FINANCIAL: bool = True
+<<<<<<< HEAD
     
+=======
+    FINANCIAL_UPDATE_FREQ: int = 30
+
+>>>>>>> fd87bc8 (修复项目bug：数据库连接、定时任务、配置、日志)
     class Config:
         env_file = ".env"
+        extra = "ignore"
 
 
 settings = Settings()
 
 
+<<<<<<< HEAD
 USER_AGENT_POOL = [
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36",
@@ -102,14 +110,74 @@ FINANCIAL_TABLE_COLUMNS = [
 STOCK_BASIC_TABLE_COLUMNS = [
     "ts_code", "symbol", "name", "area", "industry", "list_date", "status"
 ]
-
-
-VALUATION_VALIDATION_RULES = {
-    "pe": {"min": -100, "max": 1000, "allow_null": True},
-    "pe_ttm": {"min": -100, "max": 1000, "allow_null": True},
-    "pb": {"min": -10, "max": 100, "allow_null": True},
-    "ps": {"min": -50, "max": 500, "allow_null": True},
-    "ps_ttm": {"min": -50, "max": 500, "allow_null": True},
-    "dv_ratio": {"min": 0, "max": 20, "allow_null": True},
-    "dv_ttm": {"min": 0, "max": 20, "allow_null": True},
+=======
+# ==================== 表结构定义 ====================
+DAILY_TABLE_SCHEMA = {
+    "ts_code": "VARCHAR",
+    "trade_date": "DATE",
+    "open": "DOUBLE",
+    "high": "DOUBLE",
+    "low": "DOUBLE",
+    "close": "DOUBLE",
+    "pre_close": "DOUBLE",
+    "change": "DOUBLE",
+    "pct_chg": "DOUBLE",
+    "volume": "BIGINT",
+    "amount": "BIGINT",
+    "adj_factor": "DOUBLE",
+    "open_adj": "DOUBLE",
+    "high_adj": "DOUBLE",
+    "low_adj": "DOUBLE",
+    "close_adj": "DOUBLE",
 }
+
+VALUATION_TABLE_SCHEMA = {
+    "ts_code": "VARCHAR",
+    "trade_date": "DATE",
+    "pe": "DOUBLE",
+    "pe_ttm": "DOUBLE",
+    "pb": "DOUBLE",
+    "ps": "DOUBLE",
+    "ps_ttm": "DOUBLE",
+    "dv_ratio": "DOUBLE",
+    "dv_ttm": "DOUBLE",
+    "total_mv": "BIGINT",
+    "circ_mv": "BIGINT",
+}
+
+FINANCIAL_TABLE_SCHEMA = {
+    "ts_code": "VARCHAR",
+    "ann_date": "DATE",
+    "f_ann_date": "DATE",
+    "end_date": "DATE",
+    "report_type": "INT",
+    "basic_eps": "DOUBLE",
+    "diluted_eps": "DOUBLE",
+    "total_revenue": "BIGINT",
+    "operating_revenue": "BIGINT",
+    "profit_total": "BIGINT",
+    "net_profit": "BIGINT",
+    "total_assets": "BIGINT",
+    "total_liability": "BIGINT",
+    "owner_eq": "BIGINT",
+}
+
+STOCK_BASIC_TABLE_SCHEMA = {
+    "ts_code": "VARCHAR",
+    "symbol": "VARCHAR",
+    "name": "VARCHAR",
+    "area": "VARCHAR",
+    "industry": "VARCHAR",
+    "list_date": "DATE",
+    "status": "VARCHAR",
+}
+>>>>>>> fd87bc8 (修复项目bug：数据库连接、定时任务、配置、日志)
+
+
+USER_AGENT_POOL = [
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36",
+]
+VALUATION_VALIDATION_RULES = {}
+
+# 自动更新财务数据频率（天）
