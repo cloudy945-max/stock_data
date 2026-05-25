@@ -27,6 +27,32 @@ def retry_with_backoff(max_retries: int = None):
     return decorator
 
 
+def retry_with_long_delay(max_retries: int = None):
+    """增强版重试装饰器，适合 ARM NAS 网络不稳定环境
+    - 每次重试间隔 3-8 秒随机延时
+    - 最多重试 5 次
+    """
+    max_retries = max_retries or 5
+    
+    def decorator(func):
+        @wraps(func)
+        def wrapper(*args, **kwargs):
+            last_exception = None
+            for attempt in range(max_retries):
+                try:
+                    return func(*args, **kwargs)
+                except Exception as e:
+                    last_exception = e
+                    wait_time = random.uniform(3, 8)
+                    time.sleep(wait_time)
+                    if attempt < max_retries - 1:
+                        pass
+            
+            raise last_exception
+        return wrapper
+    return decorator
+
+
 def retry_on_failure(max_retries: int = None):
     max_retries = max_retries or settings.MAX_RETRIES
     
