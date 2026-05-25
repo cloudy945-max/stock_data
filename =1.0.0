@@ -1,0 +1,13 @@
+Looking in indexes: http://mirrors.tencentyun.com/pypi/simple
+Collecting pydantic==1.10.12
+  Downloading pydantic-1.10.12-py3-none-any.whl (158 kB)
+Requirement already satisfied: duckdb in ./venv/lib/python3.12/site-packages (1.5.3)
+Requirement already satisfied: requests in ./venv/lib/python3.12/site-packages (2.34.2)
+Requirement already satisfied: python-dotenv in ./venv/lib/python3.12/site-packages (1.2.2)
+Requirement already satisfied: typing-extensions>=4.2.0 in ./venv/lib/python3.12/site-packages (from pydantic==1.10.12) (4.15.0)
+Requirement already satisfied: charset_normalizer<4,>=2 in ./venv/lib/python3.12/site-packages (from requests) (3.4.7)
+Requirement already satisfied: idna<4,>=2.5 in ./venv/lib/python3.12/site-packages (from requests) (3.16)
+Requirement already satisfied: urllib3<3,>=1.26 in ./venv/lib/python3.12/site-packages (from requests) (2.7.0)
+Requirement already satisfied: certifi>=2023.5.7 in ./venv/lib/python3.12/site-packages (from requests) (2026.5.20)
+Installing collected packages: pydantic
+Successfully installed pydantic-1.10.12
