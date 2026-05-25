@@ -1,6 +1,6 @@
 python==3.11.5
-duckdb==1.0.0
 pandas==2.1.4
+sqlalchemy==2.0.23
 tushare==1.2.89
 akshare==1.11.86
 requests==2.31.0
@@ -9,3 +9,5 @@ python-dotenv==1.0.0
 loguru==0.7.2
 tenacity==8.2.3
 pydantic==2.5.2
+beautifulsoup4==4.12.2
+html5lib==1.1

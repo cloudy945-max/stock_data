@@ -1,4 +1,4 @@
-from .duckdb_storage import DuckDBStorage
+from .sqlite_storage import SQLiteStorage, DuckDBStorage
 
 
-__all__ = ["DuckDBStorage"]
+__all__ = ["SQLiteStorage", "DuckDBStorage"]

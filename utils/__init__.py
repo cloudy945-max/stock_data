@@ -1,5 +1,5 @@
 from .logger import setup_logger, get_logger
-from .retry import random_delay, retry_with_backoff, retry_on_failure
+from .retry import random_delay, retry_with_backoff, retry_with_long_delay, retry_on_failure
 from .data_clean import (
     normalize_ts_code,
     normalize_date,
@@ -17,6 +17,7 @@ __all__ = [
     "get_logger",
     "random_delay",
     "retry_with_backoff",
+    "retry_with_long_delay",
     "retry_on_failure",
     "normalize_ts_code",
     "normalize_date",
